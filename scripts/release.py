@@ -75,7 +75,9 @@ def cmd_detect() -> None:
     )
 
 
-def _run(command: list[str], *, capture_output: bool = False) -> subprocess.CompletedProcess[str]:
+def _run(
+    command: list[str], *, capture_output: bool = False, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
     print(f"Running: {' '.join(command)}")
     return subprocess.run(
         command,
@@ -83,6 +85,7 @@ def _run(command: list[str], *, capture_output: bool = False) -> subprocess.Comp
         check=True,
         text=True,
         capture_output=capture_output,
+        env=env,
     )
 
 
@@ -99,7 +102,7 @@ def cmd_publish() -> None:
         raise ReleaseError("Publishing requires UV_PUBLISH_TOKEN or PYPI_TOKEN to be set")
 
     env["UV_PUBLISH_TOKEN"] = token
-    _run(["uv", "publish"], capture_output=False)
+    _run(["uv", "publish"], capture_output=False, env=env)
 
 
 COMMANDS = {
