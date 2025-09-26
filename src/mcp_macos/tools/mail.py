@@ -72,8 +72,7 @@ def _fetch_messages(script: str, *args: Any) -> list[MailMessage]:
     return results
 
 
-@mail_server.tool
-def list_accounts() -> dict[str, list[str]]:
+def _list_accounts() -> dict[str, list[str]]:
     """List available Apple Mail accounts."""
     try:
         raw_output = run_script("mail", "list_accounts.applescript")
@@ -82,8 +81,7 @@ def list_accounts() -> dict[str, list[str]]:
     return {"accounts": parse_line_output(raw_output)}
 
 
-@mail_server.tool
-def list_mailboxes(account: str | None = None) -> dict[str, list[MailboxEntry]]:
+def _list_mailboxes(account: str | None = None) -> dict[str, list[MailboxEntry]]:
     """List mailboxes for all accounts or a specific account."""
     try:
         raw_output = run_script("mail", "list_mailboxes.applescript", account or "")
@@ -95,8 +93,7 @@ def list_mailboxes(account: str | None = None) -> dict[str, list[MailboxEntry]]:
     return {"mailboxes": mailboxes}
 
 
-@mail_server.tool
-def get_unread(
+def _get_unread(
     account: str | None = None,
     mailbox: str | None = None,
     limit: int | None = 10,
@@ -112,8 +109,7 @@ def get_unread(
     return {"messages": messages, "limit": limited}
 
 
-@mail_server.tool
-def get_latest(
+def _get_latest(
     account: str | None = None,
     mailbox: str | None = None,
     limit: int | None = 10,
@@ -129,8 +125,7 @@ def get_latest(
     return {"messages": messages, "limit": limited}
 
 
-@mail_server.tool
-def search_messages(
+def _search_messages(
     search_term: str,
     account: str | None = None,
     mailbox: str | None = None,
@@ -151,8 +146,7 @@ def search_messages(
     return {"messages": messages, "limit": limited, "search_term": search_term}
 
 
-@mail_server.tool
-def send_message(
+def _send_message(
     to: str,
     subject: str,
     body: str,
@@ -189,3 +183,11 @@ def send_message(
         "subject": subject,
         "used_sender": sender,
     }
+
+
+list_accounts = mail_server.tool(_list_accounts)
+list_mailboxes = mail_server.tool(_list_mailboxes)
+get_unread = mail_server.tool(_get_unread)
+get_latest = mail_server.tool(_get_latest)
+search_messages = mail_server.tool(_search_messages)
+send_message = mail_server.tool(_send_message)
