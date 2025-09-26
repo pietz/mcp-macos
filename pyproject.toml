@@ -11,6 +11,11 @@ dependencies = [
     "fastmcp>=2.12.3",
 ]
 
+[tool.uv]
+dev-dependencies = [
+    "pytest>=8.3.3",
+]
+
 [project.scripts]
 mcp-macos = "mcp_macos:main"
 
