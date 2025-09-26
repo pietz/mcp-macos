@@ -1,0 +1,65 @@
+name: Release on Version Bump
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract versions
+        id: versions
+        run: |
+          python <<'PY'
+          import os
+          import pathlib
+          import subprocess
+          import tomllib
+
+          def load_version(path: pathlib.Path) -> str:
+            with path.open("rb") as fh:
+              data = tomllib.load(fh)
+            return data["project"]["version"]
+
+          current_version = load_version(pathlib.Path("pyproject.toml"))
+
+          try:
+            previous_pyproject = subprocess.run(
+                ["git", "show", "HEAD^:pyproject.toml"],
+                check=True,
+                text=True,
+                capture_output=True,
+            ).stdout
+          except subprocess.CalledProcessError:
+            previous_pyproject = ""
+
+          previous_version = ""
+          if previous_pyproject:
+            previous_version = tomllib.loads(previous_pyproject)["project"]["version"]
+
+          changed = str(bool(current_version and current_version != previous_version)).lower()
+
+          output_path = os.environ["GITHUB_OUTPUT"]
+          with open(output_path, "a", encoding="utf-8") as fh:
+            fh.write(f"current_version={current_version}\n")
+            fh.write(f"previous_version={previous_version}\n")
+            fh.write(f"version_changed={changed}\n")
+          PY
+
+      - name: Create GitHub release
+        if: steps.versions.outputs.version_changed == 'true'
+        uses: actions/create-release@v1
+        with:
+          tag_name: v${{ steps.versions.outputs.current_version }}
+          release_name: Release v${{ steps.versions.outputs.current_version }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
