@@ -163,12 +163,13 @@ def test_send_message_success(monkeypatch):
     ],
 )
 def test_send_message_validation_errors(kwargs, error_message):
-    with pytest.raises(ValueError, match=error_message):
-        call_kwargs = {"to": "", "subject": "", "body": ""}
-        call_kwargs.update(kwargs)
+    import re
 
-        with pytest.raises(ValueError, match=error_message):
-            mail_module._send_message(**call_kwargs)
+    call_kwargs = {"to": "", "subject": "", "body": ""}
+    call_kwargs.update(kwargs)
+
+    with pytest.raises(ValueError, match=re.escape(error_message)):
+        mail_module._send_message(**call_kwargs)
 
 
 def test_send_message_non_ok(monkeypatch):
