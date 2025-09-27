@@ -41,7 +41,7 @@ def test_list_emails_parses_results(monkeypatch: pytest.MonkeyPatch) -> None:
     ]
     assert captured_args == (
         "mail_list_emails.applescript",
-        ("5", "any", "", "", "500"),
+        ("5", "any", "", "", "", "500"),
     )
 
 
@@ -54,10 +54,10 @@ def test_list_emails_converts_arguments(monkeypatch: pytest.MonkeyPatch) -> None
         return ""
 
     monkeypatch.setattr(mail, "run_applescript", fake_run)
-    mail.list_emails.fn(status="unread", mailbox="Inbox", limit=50, query="invoice")
+    mail.list_emails.fn(status="unread", account="Work", mailbox="Inbox", limit=50, query="invoice")
     assert captured_args == (
         "mail_list_emails.applescript",
-        ("30", "unread", "Inbox", "invoice", "500"),
+        ("30", "unread", "Work", "Inbox", "invoice", "500"),
     )
 
 
@@ -74,7 +74,7 @@ def test_list_emails_handles_read_filter(monkeypatch: pytest.MonkeyPatch) -> Non
     assert rows[0]["status"] == "Read"
     assert captured_args == (
         "mail_list_emails.applescript",
-        ("10", "read", "", "", "500"),
+        ("10", "read", "", "", "", "500"),
     )
 
 
@@ -87,17 +87,74 @@ def test_send_handles_multiple_recipients(monkeypatch: pytest.MonkeyPatch) -> No
         return "OK"
 
     monkeypatch.setattr(mail, "run_applescript", fake_run)
-    result = mail.send.fn(
-        to="a@example.com, b@example.com; c@example.com\n",
+    result = mail.send_email.fn(
+        to=["a@example.com", "b@example.com", "c@example.com"],
         subject="Subject",
         body="Body",
-        visible=True,
     )
     assert result == "OK"
     assert captured_args == (
         "mail_send.applescript",
-        ("Subject", "Body", "true", "a@example.com", "b@example.com", "c@example.com"),
+        ("Subject", "Body", "", "3", "0", "a@example.com", "b@example.com", "c@example.com"),
     )
+
+
+def test_send_includes_cc(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured_args: tuple[str, tuple[str, ...]] | None = None
+
+    def fake_run(script_name: str, *args: str) -> str:
+        nonlocal captured_args
+        captured_args = (script_name, args)
+        return "OK"
+
+    monkeypatch.setattr(mail, "run_applescript", fake_run)
+    result = mail.send_email.fn(
+        to=["primary@example.com"],
+        cc=["copy1@example.com", "copy2@example.com"],
+        subject="Subject",
+        body="Body",
+        message_id="123",
+    )
+    assert result == "OK"
+    assert captured_args == (
+        "mail_send.applescript",
+        (
+            "Subject",
+            "Body",
+            "123",
+            "1",
+            "2",
+            "primary@example.com",
+            "copy1@example.com",
+            "copy2@example.com",
+        ),
+    )
+
+
+def test_update_email_status_calls_script(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured_args: tuple[str, tuple[str, ...]] | None = None
+
+    def fake_run(script_name: str, *args: str) -> str:
+        nonlocal captured_args
+        captured_args = (script_name, args)
+        return "OK"
+
+    monkeypatch.setattr(mail, "run_applescript", fake_run)
+    result = mail.update_email_status.fn(id="123", action="mark_read")
+    assert result == "OK"
+    assert captured_args == (
+        "mail_update_email_status.applescript",
+        ("123", "mark_read"),
+    )
+
+
+def test_update_email_status_raises_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_run(script_name: str, *args: str) -> str:
+        return "ERROR: message not found"
+
+    monkeypatch.setattr(mail, "run_applescript", fake_run)
+    with pytest.raises(RuntimeError):
+        mail.update_email_status.fn(id="999", action="archive")
 
 
 def test_split_recipients_parses_common_separators() -> None:

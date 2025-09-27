@@ -43,49 +43,25 @@ on run argv
 
             set subj to (subject of targetMessage as text)
             set sndr to (sender of targetMessage as text)
-            set tos to ""
-            try
-                set tos to my join_addresses(address of to recipients of targetMessage)
-            end try
-            set ccs to ""
-            try
-                set ccs to my join_addresses(address of cc recipients of targetMessage)
-            end try
             set mid to (id of targetMessage as text)
             set dr to (date received of targetMessage as text)
-            set mbx to (name of mailbox of targetMessage as text)
+            set accName to ""
+            try
+                set accName to (name of account of mailbox of targetMessage as text)
+            end try
             set rstat to (read status of targetMessage)
             if rstat then
-                set rtxt to "true"
+                set statusText to "Read"
             else
-                set rtxt to "false"
+                set statusText to "Unread"
             end if
-            set msgid to ""
-            try
-                set msgid to (message id of targetMessage as text)
-            end try
             set bodyText to (content of targetMessage as text)
-            set previewText to bodyText
-            try
-                if (count previewText) > 500 then set previewText to text 1 thru 500 of previewText
-            end try
 
-            set lineText to San's sanitize(subj) & tab & San's sanitize(sndr) & tab & San's sanitize(tos) & tab & San's sanitize(ccs) & tab & mid & tab & San's sanitize(dr) & tab & San's sanitize(mbx) & tab & rtxt & tab & San's sanitize(msgid) & tab & San's sanitize(previewText) & tab & San's sanitize(bodyText)
+            -- Order: id, datetime, from, account, status, subject, body
+            set lineText to mid & tab & San's sanitize(dr) & tab & San's sanitize(sndr) & tab & San's sanitize(accName) & tab & statusText & tab & San's sanitize(subj) & tab & San's sanitize(bodyText)
             return lineText
         on error errMsg
             return ""
         end try
     end tell
 end run
-
-on join_addresses(lst)
-    set AppleScript's text item delimiters to ", "
-    try
-        set t to lst as text
-    on error
-        set t to ""
-    end try
-    set AppleScript's text item delimiters to ""
-    return t
-end join_addresses
-

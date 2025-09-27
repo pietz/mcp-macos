@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Literal
 
 from fastmcp import FastMCP
-from ..utils import run_applescript, tsv_to_dicts, split_recipients
+from ..utils import run_applescript, tsv_to_dicts
 
 mcp = FastMCP("macos-mail")
 
@@ -11,22 +11,24 @@ mcp = FastMCP("macos-mail")
 def list_emails(
     status: Literal["any", "unread", "read"] = "any",
     query: str | None = None,
+    account: str | None = None,
     mailbox: str | None = None,
     limit: int = 10,
 ) -> list[dict]:
     """
-    List recent emails, optionally filtering by status (any/unread/read), mailbox, or search query.
-    Always includes a body preview (first 500 characters).
+    List recent emails. Optionally filter by status, account, mailbox, or search query.
     """
     limit_value = max(1, min(limit, 30))
 
     mailbox_arg = mailbox.strip() if mailbox else ""
     query_arg = query.strip() if query else ""
+    account_arg = account.strip() if account else ""
 
     out = run_applescript(
         "mail_list_emails.applescript",
         str(limit_value),
         status.lower(),
+        account_arg,
         mailbox_arg,
         query_arg,
         "500",
@@ -40,97 +42,122 @@ def list_emails(
 
 
 @mcp.tool
-def send(to: str, subject: str, body: str, visible: bool = False) -> str:
+def send_email(
+    to: list[str],
+    subject: str,
+    body: str,
+    cc: list[str] | None = None,
+    message_id: str | None = None,
+) -> str:
     """
-    Send an email via Apple Mail. `to` may be comma/semicolon/newline separated.
+    Send an email. If `message_id` is provided, it's a reply or forward.
+    `to` must contain at least one recipient email; `cc` optional.
     """
-    recips = split_recipients(to)
-    vis = "true" if visible else "false"
-    # argv: subject, body, visible, recipients...
-    run_applescript("mail_send.applescript", subject, body, vis, *recips)
+    to_recipients = [r.strip() for r in to if r.strip()]
+    if not to_recipients:
+        raise ValueError("At least one 'to' recipient is required")
+
+    cc_list = cc or []
+    cc_recipients = [r.strip() for r in cc_list if r.strip()]
+    message_arg = message_id.strip() if message_id else ""
+    # argv: subject, body, message_id, to_count, cc_count, to..., cc...
+    run_applescript(
+        "mail_send.applescript",
+        subject,
+        body,
+        message_arg,
+        str(len(to_recipients)),
+        str(len(cc_recipients)),
+        *to_recipients,
+        *cc_recipients,
+    )
     return "OK"
 
 
-@mcp.tool
-def list_accounts() -> list[dict]:
-    """List Mail accounts. Keys: name."""
+def _list_accounts() -> list[str]:
     out = run_applescript("mail_list_accounts.applescript")
-    return tsv_to_dicts(out, ["name"]) if out else []
+    rows = tsv_to_dicts(out, ["name"]) if out else []
+    return [row.get("name", "") for row in rows if row.get("name")]
 
 
-@mcp.tool
-def list_mailboxes(account: str | None = None) -> list[dict]:
-    """
-    List mailboxes. Keys: mailbox, account, unread.
-    If `account` is provided, only mailboxes of that account are returned.
-    """
-    acc = account.strip() if account else ""
-    out = run_applescript("mail_list_mailboxes.applescript", acc)
+def _list_mailboxes(account: str) -> list[dict]:
+    out = run_applescript("mail_list_mailboxes.applescript", account)
     rows = tsv_to_dicts(out, ["mailbox", "account", "unread"]) if out else []
     for row in rows:
         try:
             row["unread"] = int(row.get("unread", "0") or 0)
         except Exception:
             row["unread"] = 0
+        row["mailbox"] = row.get("mailbox", "")
+        row["account"] = row.get("account", "")
     return rows
 
 
 @mcp.tool
-def overview(limit_recent: int = 5) -> dict:
+def overview() -> dict:
     """
-    High-level Mail overview with accounts, per-account inbox unread, and recent emails
-    from the primary Inbox.
+    High-level snapshot of Mail accounts, their mailboxes, and the three most recent
+    emails per account.
     """
-    accounts = [a.get("name", "") for a in list_accounts.fn()]  # type: ignore[attr-defined]
+    accounts = _list_accounts()
+    accounts_info: list[dict] = []
+
     try:
         unread_str = run_applescript("mail_unread_inbox_count.applescript")
         inbox_unread = int(unread_str or 0)
     except Exception:
         inbox_unread = 0
-    # Per-account Inbox unread counts
-    accounts_info: list[dict] = []
-    for acc in accounts:
-        inbox_unread_acc = 0
-        try:
-            mboxes = list_mailboxes.fn(acc)  # type: ignore[attr-defined]
-            for mb in mboxes:
-                if (mb.get("mailbox", "").lower() == "inbox"):
-                    inbox_unread_acc = int(mb.get("unread", 0) or 0)
-                    break
-        except Exception:
-            pass
-        accounts_info.append({"name": acc, "inbox_unread": inbox_unread_acc})
 
-    recent = list_emails.fn(limit=max(1, min(limit_recent, 10)), mailbox="Inbox")  # type: ignore[attr-defined]
+    for account in accounts:
+        mailboxes = _list_mailboxes(account)
+        recent_emails = list_emails.fn(account=account, limit=3)  # type: ignore[attr-defined]
+        accounts_info.append(
+            {
+                "name": account,
+                "mailboxes": mailboxes,
+                "recent_emails": recent_emails,
+            }
+        )
+
     return {
         "accounts": accounts_info,
         "inbox_unread_total": inbox_unread,
-        "primary_inbox_recent": recent,
     }
 
 
 @mcp.tool
-def get_email(id: str) -> dict:
-    """Fetch a single email by its Apple Mail `id` with full body content."""
+def read_email(id: str) -> dict:
+    """Fetch a single email by its Apple Mail `id` with full body content.
+
+    Returns keys: id, received, from, account, status, subject, body
+    """
     out = run_applescript("mail_get_email_by_id.applescript", id)
     rows = tsv_to_dicts(
         out,
         [
-            "subject",
-            "from",
-            "to",
-            "cc",
             "id",
             "received",
-            "mailbox",
-            "read",
-            "message_id",
-            "preview",
+            "from",
+            "account",
+            "status",
+            "subject",
             "body",
         ],
     )
     if not rows:
         raise ValueError("Email not found")
     row = rows[0]
-    row["read"] = row.get("read", "").lower() == "true"
     return row
+
+
+@mcp.tool
+def update_email_status(
+    id: str,
+    action: Literal["mark_read", "mark_unread", "archive"],
+) -> str:
+    """Update an email's state by Apple Mail `id`. Actions: mark_read, mark_unread, archive."""
+
+    result = run_applescript("mail_update_email_status.applescript", id, action)
+    if result and result != "OK":
+        raise RuntimeError(result)
+    return "OK"

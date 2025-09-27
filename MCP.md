@@ -256,6 +256,16 @@ uv run fastmcp ls                # list installed servers
 uv run fastmcp install main.py   # install via manifest
 ```
 
+## Usability & Tool Design
+### Embed Flexibility Without Overload
+Each tool becomes part of the LLM's working context, so keep the surface area compact. Prefer a single tool with well-chosen parameters over several near-identical endpoints when they return the same shape of data. Follow the `list_emails` pattern: defaults cover the common case, optional flags (for unread, query strings, etc.) unlock variations without multiplying manifest entries.
+
+### Group Related Capabilities Thoughtfully
+Combine operations only when their inputs and outputs stay coherent. If the parameter list begins to diverge wildly or you find yourself adding an `operation` switch with disjoint argument sets, split the tool. The goal is to offer the model a clear, reusable schema rather than a catch-all interface that requires memorising mode-specific quirks.
+
+### Preserve Clear Mental Models
+Separate tools that represent fundamentally different intents or side effects—retrieving messages versus sending one, for example. This keeps the manifest scannable, helps the model choose safely, and reduces accidental misuse. Document the intent in the tool description so the LLM understands when to reach for each capability.
+
 ## References
 - MCP specification: <https://spec.modelcontextprotocol.io>
 - FastMCP Sidemap: <https://gofastmcp.com/llms.txt>
