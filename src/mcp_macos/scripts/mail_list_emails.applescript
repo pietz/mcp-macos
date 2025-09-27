@@ -29,48 +29,147 @@ on run argv
     set outLines to {}
 
     tell application "Mail"
-        set targetMailbox to inbox
-        if mailboxName is not "" then
-            set foundMailbox to my find_mailbox(mailboxName)
-            if foundMailbox is not missing value then set targetMailbox to foundMailbox
-        end if
-
-        set msgList to messages of targetMailbox
         set collected to 0
-        repeat with m in msgList
-            set includeMsg to true
-            set isRead to read status of m
-
-            if statusFilter is "unread" then
-                if isRead is true then set includeMsg to false
-            else if statusFilter is "read" then
-                if isRead is false then set includeMsg to false
-            end if
-
-            set subjectText to subject of m as text
-            set senderText to sender of m as text
-            set contentText to content of m as text
-
-            if includeMsg and queryText is not "" then
-                set includeMsg to my message_matches(subjectText, senderText, contentText, queryText)
-            end if
-
-            if includeMsg then
-                set mailId to id of m as text
-                set receivedText to date received of m as text
-                set mailboxText to name of mailbox of m as text
-                if isRead then
-                    set readText to "true"
-                else
-                    set readText to "false"
-                end if
-                set previewText to my make_preview(contentText, previewLen)
-                set lineText to my sanitize(subjectText) & tab & my sanitize(senderText) & tab & mailId & tab & my sanitize(receivedText) & tab & my sanitize(mailboxText) & tab & readText & tab & previewText
-                set end of outLines to lineText
-                set collected to collected + 1
+        if mailboxName is "" or mailboxName is "Inbox" then
+            -- First try the unified global Inbox (some setups populate this)
+            try
+                set globalMsgs to messages of inbox
+                repeat with m in globalMsgs
+                    set includeMsg to true
+                    set isRead to read status of m
+                    if statusFilter is "unread" then
+                        if isRead is true then set includeMsg to false
+                    else if statusFilter is "read" then
+                        if isRead is false then set includeMsg to false
+                    end if
+                    set subjectText to subject of m as text
+                    set senderText to sender of m as text
+                    set contentText to ""
+                    if includeMsg and queryText is not "" then
+                        set contentText to content of m as text
+                        set includeMsg to my message_matches(subjectText, senderText, contentText, queryText)
+                    end if
+                    if includeMsg then
+                        if contentText is "" then set contentText to content of m as text
+                        set mailId to id of m as text
+                        set receivedText to date received of m as text
+                        set accName to ""
+                        try
+                            set accName to (name of account of mailbox of m as text)
+                        end try
+                        if isRead then
+                            set readText to "true"
+                        else
+                            set readText to "false"
+                        end if
+                        set previewText to my make_preview(contentText, previewLen)
+                        set statusText to ("Read")
+                        if readText is "false" then set statusText to "Unread"
+                        set lineText to mailId & tab & my sanitize(receivedText) & tab & my sanitize(senderText) & tab & my sanitize(accName) & tab & statusText & tab & my sanitize(subjectText) & tab & previewText
+                        set end of outLines to lineText
+                        set collected to collected + 1
+                        if collected ≥ limitVal then exit repeat
+                    end if
+                end repeat
+            end try
+            -- If not enough collected, also iterate each account's Inbox
+            if collected < limitVal then
+                repeat with acc in accounts
+                try
+                    set accInbox to mailbox "Inbox" of acc
+                    set accMsgs to messages of accInbox
+                    set accName to (name of acc as text)
+                    repeat with m in accMsgs
+                        set includeMsg to true
+                        set isRead to read status of m
+                        if statusFilter is "unread" then
+                            if isRead is true then set includeMsg to false
+                        else if statusFilter is "read" then
+                            if isRead is false then set includeMsg to false
+                        end if
+                        set subjectText to subject of m as text
+                        set senderText to sender of m as text
+                        set contentText to ""
+                        if includeMsg and queryText is not "" then
+                            set contentText to content of m as text
+                            set includeMsg to my message_matches(subjectText, senderText, contentText, queryText)
+                        end if
+                        if includeMsg then
+                            if contentText is "" then set contentText to content of m as text
+                            set mailId to id of m as text
+                            set receivedText to date received of m as text
+                            if isRead then
+                                set readText to "true"
+                            else
+                                set readText to "false"
+                            end if
+                            set previewText to my make_preview(contentText, previewLen)
+                            set statusText to ("Read")
+                            if readText is "false" then set statusText to "Unread"
+                            set lineText to mailId & tab & my sanitize(receivedText) & tab & my sanitize(senderText) & tab & my sanitize(accName) & tab & statusText & tab & my sanitize(subjectText) & tab & previewText
+                            set end of outLines to lineText
+                            set collected to collected + 1
+                            if collected ≥ limitVal then exit repeat
+                        end if
+                    end repeat
+                end try
                 if collected ≥ limitVal then exit repeat
+            end repeat
             end if
-        end repeat
+        else
+            set foundMailbox to my find_mailbox(mailboxName)
+            if foundMailbox is not missing value then
+                set accMsgs to messages of foundMailbox
+                -- Try to resolve account name for this mailbox
+                set accName to ""
+                try
+                    tell application "Mail"
+                        repeat with a in accounts
+                            try
+                                set mbs to mailboxes of a
+                                if mbs contains foundMailbox then
+                                    set accName to (name of a as text)
+                                    exit repeat
+                                end if
+                            end try
+                        end repeat
+                    end tell
+                end try
+                repeat with m in accMsgs
+                    set includeMsg to true
+                    set isRead to read status of m
+                    if statusFilter is "unread" then
+                        if isRead is true then set includeMsg to false
+                    else if statusFilter is "read" then
+                        if isRead is false then set includeMsg to false
+                    end if
+                    set subjectText to subject of m as text
+                    set senderText to sender of m as text
+                    set contentText to ""
+                    if includeMsg and queryText is not "" then
+                        set contentText to content of m as text
+                        set includeMsg to my message_matches(subjectText, senderText, contentText, queryText)
+                    end if
+                    if includeMsg then
+                        if contentText is "" then set contentText to content of m as text
+                        set mailId to id of m as text
+                        set receivedText to date received of m as text
+                        if isRead then
+                            set readText to "true"
+                        else
+                            set readText to "false"
+                        end if
+                        set previewText to my make_preview(contentText, previewLen)
+                        set statusText to ("Read")
+                        if readText is "false" then set statusText to "Unread"
+                        set lineText to mailId & tab & my sanitize(receivedText) & tab & my sanitize(senderText) & tab & my sanitize(accName) & tab & statusText & tab & my sanitize(subjectText) & tab & previewText
+                        set end of outLines to lineText
+                        set collected to collected + 1
+                        if collected ≥ limitVal then exit repeat
+                    end if
+                end repeat
+            end if
+        end if
     end tell
 
     set AppleScript's text item delimiters to "\n"

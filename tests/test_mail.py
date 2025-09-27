@@ -13,30 +13,30 @@ def test_list_emails_parses_results(monkeypatch: pytest.MonkeyPatch) -> None:
         nonlocal captured_args
         captured_args = (script_name, args)
         return (
-            "Subject\tSender\t123\t2024-01-01\tInbox\tfalse\tPreview text\n"
-            "Other\tAnother\t456\t2024-01-02\tWork\ttrue\tMore preview"
+            "123\t2024-01-01\tSender\t\tUnread\tSubject\tPreview text\n"
+            "456\t2024-01-02\tAnother\t\tRead\tOther\tMore preview"
         )
 
     monkeypatch.setattr(mail, "run_applescript", fake_run)
     rows = mail.list_emails.fn(limit=5)
     assert rows == [
         {
-            "subject": "Subject",
-            "from": "Sender",
             "id": "123",
             "received": "2024-01-01",
-            "mailbox": "Inbox",
-            "read": False,
-            "preview": "Preview text",
+            "from": "Sender",
+            "account": "",
+            "status": "Unread",
+            "subject": "Subject",
+            "body": "Preview text",
         },
         {
-            "subject": "Other",
-            "from": "Another",
             "id": "456",
             "received": "2024-01-02",
-            "mailbox": "Work",
-            "read": True,
-            "preview": "More preview",
+            "from": "Another",
+            "account": "",
+            "status": "Read",
+            "subject": "Other",
+            "body": "More preview",
         },
     ]
     assert captured_args == (
@@ -67,11 +67,11 @@ def test_list_emails_handles_read_filter(monkeypatch: pytest.MonkeyPatch) -> Non
     def fake_run(script_name: str, *args: str) -> str:
         nonlocal captured_args
         captured_args = (script_name, args)
-        return "Subject\tSender\t123\t2024-01-01\tInbox\ttrue\tPreview"
+        return "123\t2024-01-01\tSender\t\tRead\tSubject\tPreview"
 
     monkeypatch.setattr(mail, "run_applescript", fake_run)
     rows = mail.list_emails.fn(status="read")
-    assert rows[0]["read"] is True
+    assert rows[0]["status"] == "Read"
     assert captured_args == (
         "mail_list_emails.applescript",
         ("10", "read", "", "", "500"),
